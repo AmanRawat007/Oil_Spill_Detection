@@ -7,4 +7,5 @@ In this project our task will be to identify these dark regions and classify the
 
 # Methodology
 a)The first step is to blur the image in order to reduce the noise (since SAR images are noisy). Toidentify the potential oil spill which is done by thresholding the image (may be with a fix value or via it’s mean & mode), this process clearly separates dark objects and whitens out the rest of the background. Finally contouring is applied and very small areas are removed, area and perimeter of the significant region is calculated.
+
 b)These image based parameters along with shape based (yet to be evaluated) parameters make the   input parameters for the Neural Network. The ANN then trains itself for the given data via stochastic gradient descent (updates weights at every epoch). Finally training the dataset and analyzing the accuracy of the result.

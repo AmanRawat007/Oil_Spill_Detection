@@ -1,0 +1,183 @@
+#-------------------------------------------------------------------------------------------------------------------------------
+
+import csv
+import cv2
+import numpy as np
+import statistics
+from matplotlib import pyplot as plt
+
+#-------------------------------------------------------------------------------------------------------------------------------
+
+img = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)
+img1 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)  #for segmentation
+img2 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)  #for contouring
+img3 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)  #for perimeter
+myData = [["Area","Peimeter","Complexity","OSD","Mx_Contrast","Me_Contrast","Solidity","Circular Degree","Mx_G","Me_G","G_S_D"]]
+
+blur = np.ones((3,3),np.float32)/9                    #blurring filter
+laplacian=np.ones((3,3),np.float32)                   #laplacian filter
+for i in range(3):
+    for j in range(3):
+        if(laplacian[i,j]==1):
+            laplacian[i,j]=1
+        if(i==j and i==1):
+            laplacian[i,j]=-8
+mean=0
+data=[]
+rows,cols = img.shape            
+
+
+for i in range(rows):                           
+    for j in range(cols):
+        mean+=img[i,j]
+        data.append(img[i,j])
+        img2[i,j]=0
+        
+mean/=(rows*cols)
+variance=0
+for i in range(rows):                       
+    for j in range(cols):
+        temp=img[i,j]
+        temp=temp-mean
+        temp*=temp
+        variance+=temp
+        
+
+variance/=(rows*cols)
+variance=variance**0.5
+mode=statistics.mode(data)
+mean_value=mean-variance
+mode_value=mode-variance
+threshold_limit=(mean_value+mode_value)/2
+if(threshold_limit<50):
+    threshold_limit=50
+if(threshold_limit>(mean_value+mean_value/3)):
+    threshold_limit=(50+(mean_value+mean_value/3))/2
+#print(threshold_limit)   calculated threshold value   
+
+
+imgblur=cv2.filter2D(img,-1,blur)
+for i in range(rows):                            #threshholding  1 black on white
+    for j in range(cols):
+        if(imgblur[i,j]>=threshold_limit):
+            img1[i,j]=255
+
+for i in range(rows):                            #threshholding  2 white on black
+    for j in range(cols):
+        if(img1[i,j]!=255):
+            img2[i,j]=255
+
+#------------------------------------------------------------------------------------------------------------------------------
+
+imglaplacian = cv2.filter2D(img1,-1,laplacian) 
+limit1=0
+limit2=0
+area=0                                           #area
+perimeter=0                                      #perimeter
+im2, contours, hierarchy = cv2.findContours(img2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+lis = []
+lis2 = []
+
+for i in range(0,len(contours)):
+    cnt = contours[i]
+    limit1+= cv2.contourArea(cnt)
+    limit2+= cv2.arcLength(cnt, True)
+
+count=0
+area_sum=0
+peri_sum=0
+for i in range(0,len(contours)):                 #Finding optimistic area and perameter
+    cnt = contours[i]
+    area11 = cv2.contourArea(cnt)
+    perimeter11 = cv2.arcLength(cnt, True)
+    count=count+1
+    area_sum=area_sum+area11
+    peri_sum=peri_sum+perimeter11
+    
+for i in range(0,len(contours)):
+    cnt = contours[i]
+    area1 = cv2.contourArea(cnt)
+    perimeter1 = cv2.arcLength(cnt, True)
+    if(area1 > area_sum/count and perimeter1 > peri_sum/count):
+        print("Area = ",area1," Perimeter = ",perimeter1)
+        lis.append(cnt)
+        area+=area1
+        perimeter+=perimeter1
+cv2.drawContours(img3, lis, -1, (255,255,255), 1)
+
+complexity=perimeter/(2*(3.14*area)**0.5)        #complexity
+print("Area :- ",area)                                                                                                 #feature 1
+print("Perimeter :- ",perimeter)                                                                                       #feature 2
+print("Complexity :- ",complexity)                                                                                     #feature 3
+
+#-------------------------------------------------------------------------------------------------------------------------------
+
+meanosd=0
+pixel_object=0
+standard_diviation_osd=0
+for i in range(rows):                       
+    for j in range(cols):
+        if(img1[i,j]!=255):
+            meanosd+=img1[i,j]
+            pixel_object=pixel_object+1
+
+meanosd/=pixel_object
+for i in range(rows):                       
+    for j in range(cols):
+        if(img1[i,j]!=255):
+            temp=img[i,j]
+            temp=temp-meanosd
+            temp*=temp
+            standard_diviation_osd+=temp
+
+standard_diviation_osd/=pixel_object
+standard_diviation_osd=standard_diviation_osd**0.5
+print("osd :- ",standard_diviation_osd)                                                                                #feature 4
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+#Max contrast (ConMax) : Difference between the background mean value and the lowest value inside the object.
+#Mean Contrast (ConMe) : Difference between the background mean value and the object mean value.
+
+l_m_o=266   #lowest minimum value inside object
+b_mean_v=0  #Background mean value
+o_m_v=0     #Object Mean value
+count1=0
+count2=0
+for i in range(rows):                       
+    for j in range(cols):
+        if(img2[i,j]==255):
+            count1=count1+1
+            b_mean_v=img[i,j]+b_mean_v
+        else:
+            count2=count2+1
+            o_m_v=img[i,j]+o_m_v
+            if(img[i,j]<l_m_o):
+                l_m_o=img[i,j]
+
+
+con_max=(b_mean_v/count1)-l_m_o 
+con_me=( (b_mean_v/count1)-(o_m_v/count2) )                           
+print("Max_Contrast  :- ",con_max)                                                                                     #feature 5          
+print("Mean_Contrast  :- ",con_me)                                                                                     #feature 6  
+    
+#--------------------------------------------------------------------------------------------------------------------------------   
+
+plt.hist(img.ravel(),255,[0,255]); 
+plt.show()
+cv2.imshow('Orignal Image',img)
+cv2.imshow('Outlines',imglaplacian)
+cv2.imshow('Image After Thresholding1',img1) # black on white area
+cv2.imshow('Image After Thresholding2',img2) # white on black area use for contouring
+cv2.imshow("Contouring",img3)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+# Making file
+myData = [area,perimeter,complexity,standard_diviation_osd,con_max,con_me]
+myFile = open("C:\\Users\\rawat\\Desktop\\Sar images\\CSV Filees\\OIL_SPILL.csv",'a')
+with myFile:
+    writer = csv.writer(myFile)
+    writer.writerow(myData)

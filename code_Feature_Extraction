@@ -1,0 +1,261 @@
+#-------------------------------------------------------------------------------------------------------------------------------
+
+import csv
+import cv2
+import numpy as np
+import statistics
+from matplotlib import pyplot as plt
+
+#-------------------------------------------------------------------------------------------------------------------------------
+
+img = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)
+img1 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)  #for segmentation
+img2 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)  #for contouring
+img3 = cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)  #for perimeter
+img4 =cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)   #for picking 1 contour at a time
+img6 =cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\2.jpg",0)   #for gradient
+#myData = [["Area","Peimeter","Complexity","OSD","Mx_Contrast","Me_Contrast","Circular Degree","Mx_G","Me_G","G_S_D"]]
+myData = []
+
+blur = np.ones((3,3),np.float32)/9                    #blurring filter
+laplacian=np.ones((3,3),np.float32)                   #laplacian filter
+for i in range(3):
+    for j in range(3):
+        if(laplacian[i,j]==1):
+            laplacian[i,j]=1
+        if(i==j and i==1):
+            laplacian[i,j]=-8
+mean=0
+data=[]
+rows,cols = img.shape            
+
+
+for i in range(rows):                           
+    for j in range(cols):
+        mean+=img[i,j]
+        data.append(img[i,j])
+        img2[i,j]=0
+        
+mean/=(rows*cols)
+variance=0
+for i in range(rows):                       
+    for j in range(cols):
+        temp=img[i,j]
+        temp=temp-mean
+        temp*=temp
+        variance+=temp
+        
+variance/=(rows*cols)
+variance=variance**0.5
+mode=statistics.mode(data)
+mean_value=mean-variance
+mode_value=mode-variance
+threshold_limit=(mean_value+mode_value)/2
+if(threshold_limit<50):
+    threshold_limit=50
+if(threshold_limit>(mean_value+mean_value/3)):
+    threshold_limit=(50+(mean_value+mean_value/3))/2
+#print(threshold_limit)   calculated threshold value   
+
+imgblur=cv2.filter2D(img,-1,blur)
+for i in range(rows):                            #threshholding  1 black on white
+    for j in range(cols):
+        if(imgblur[i,j]>=threshold_limit):
+            img1[i,j]=255
+
+for i in range(rows):                            #threshholding  2 white on black
+    for j in range(cols):
+        if(img1[i,j]!=255):
+            img2[i,j]=255
+
+#------------------------------------------------------------------------------------------------------------------------------
+
+area=0                                           #area
+perimeter=0                                      #perimeter
+im2, contours, hierarchy = cv2.findContours(img2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+lis = []
+
+for i in range(0,len(contours)):
+    cnt = contours[i]
+    limit1+= cv2.contourArea(cnt)
+    limit2+= cv2.arcLength(cnt, True)
+
+count=0
+area_sum=0
+peri_sum=0
+for i in range(0,len(contours)):                 #Finding optimistic area and perameter
+    cnt = contours[i]
+    area11 = cv2.contourArea(cnt)
+    perimeter11 = cv2.arcLength(cnt, True)
+    count=count+1
+    area_sum=area_sum+area11
+    peri_sum=peri_sum+perimeter11
+    
+for i in range(0,len(contours)):
+    cnt = contours[i]
+    area1 = cv2.contourArea(cnt)
+    perimeter1 = cv2.arcLength(cnt, True)
+    if(area1 > area_sum/count and perimeter1 > peri_sum/count):
+        #print("Area = ",area1," Perimeter = ",perimeter1)
+        lis.append(cnt)
+        area+=area1
+        perimeter+=perimeter1
+cv2.drawContours(img3, lis, -1, (255,255,255), 1)
+
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#Fetaures Extraction
+    
+for i in range(0,len(lis)):
+    lish=[]
+    cnt = lis[i]
+    area1 = cv2.contourArea(cnt)                                                                                        #feature1
+    perimeter1 = cv2.arcLength(cnt, True)                                                                               #feature2
+    lish.append(area1)
+    lish.append(perimeter)
+    #print("area ",area1)
+    #print("perimeter ",perimeter1)
+    #img4=cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)
+    for j in range(rows):                            
+        for k in range(cols):
+            img4[j,k]=0
+    cv2.drawContours(img4, lis, i, (255,255,255), 1)
+    mask = np.zeros((rows+2, cols+2), np.uint8)
+    cv2.floodFill(img4, mask, (0,0), 255);
+    for j in range(rows):                            
+        for k in range(cols):
+            if(img4[j,k]==0):
+                img4[j,k]=img[j,k]
+    #s1="123456789"                       #To print all part separately
+    #s="part"+s1[i]
+    #cv2.imshow(s,img4)
+    
+    #----------------------------------------------------------------------------------------------------------------------------
+    
+    complexity=perimeter1/(2*(3.14*area1)**0.5)                                                                           #feature3
+    lish.append(complexity)
+    print("complexity ",complexity)
+    
+    #----------------------------------------------------------------------------------------------------------------------------
+    
+    meanosd=0
+    pixel_object=0
+    standard_diviation_osd=0
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img4[j,k]!=255):
+                meanosd+=img4[j,k]
+                pixel_object=pixel_object+1
+    if(pixel_object!=0):
+        meanosd/=pixel_object
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img4[j,k]!=255):
+                temp=img[j,k]
+                temp=temp-meanosd
+                temp*=temp
+                standard_diviation_osd+=temp
+    if(pixel_object!=0):
+        standard_diviation_osd/=pixel_object
+    standard_diviation_osd=standard_diviation_osd**0.5                                                                  #feature4         
+    lish.append(standard_diviation_osd)
+    #print("osd ",standard_diviation_osd)
+    
+    #----------------------------------------------------------------------------------------------------------------------------
+ 
+    b_mean_v=0  #Background mean value
+    count1=0
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img4[j,k]==255):
+                count1=count1+1
+                b_mean_v=img[j,k]+b_mean_v
+    l_v_o=0              #Lowest value inside object
+    o_m_v=0              #Object mean value
+    count2=0
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img4[j,k]!=255):
+                count2=count2+1
+                o_m_v=img[j,k]+o_m_v
+                if(img[j,k]>l_m_o):
+                    l_m_o=img[j,k]
+    if(count2==0):
+        count2=1
+    if(count1==0):
+        count1=1
+    con_max=(b_mean_v/count1)-l_m_o                                                                                     #feature5
+    con_me=( (b_mean_v/count1)-(o_m_v/count2) )                                                                         #feature6
+    lish.append(con_max)
+    lish.append(con_me)
+    #----------------------------------------------------------------------------------------------------------------------------
+    
+    circular_degree=(perimeter1**2)/area1                                                                                 #feature8
+    lish.append(circular_degree)
+    
+    #----------------------------------------------------------------------------------------------------------------------------
+    
+    #img6=cv2.imread(r"C:\Users\rawat\Desktop\Sar images\orignal\15.jpg",0)
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img4[j,k]!=255):
+                img6[j,k]=0
+            else:
+                img6[j,k]=255
+    imglaplacian = cv2.filter2D(img6,-1,laplacian)
+    for j in range(rows):                       
+        for k in range(cols):
+            if(imglaplacian[j,k]==255):
+                img6[j,k]=img[j,k]
+            else:
+                img6[j,k]=255
+    #cv2.imshow(s,img6)                   #only boundries are selected and store in img6
+    
+    Max_Gradient=266
+    Mean_Gradient=0
+    St_Dv_Gradient=0
+    count5=0
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img6[j,k]!=255):
+                if(img6[j,k]<Max_Gradient):
+                    Max_Gradient=img6[j,k]                                                                              #feature9
+                count5=count5+1
+                Mean_Gradient+=img6[j,k]
+    if(count5==0):
+        count5=1
+    lish.append(Max_Gradient)
+    Mean_Gradient/=count5                                                                                              #feature10
+    lish.append(Mean_Gradient)
+    
+    for j in range(rows):                       
+        for k in range(cols):
+            if(img6[j,k]!=255):
+                temp=img[j,k]
+                temp=temp-Mean_Gradient
+                temp*=temp
+                St_Dv_Gradient+=temp
+    
+    St_Dv_Gradient/=count5
+    St_Dv_Gradient=St_Dv_Gradient**0.5                                                                                 #feature11
+    lish.append(St_Dv_Gradient)            
+    myData.append(lish)
+    
+#>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+plt.hist(img.ravel(),255,[0,255]); 
+plt.show()
+cv2.imshow('Orignal Image',img)
+cv2.imshow('Image After Thresholding1',img1) # black on white area
+cv2.imshow('Image After Thresholding2',img2) # white on black area use for contouring
+cv2.imshow("Contouring",img3)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
+#--------------------------------------------------------------------------------------------------------------------------------
+
+# Making file
+
+myFile = open("C:\\Users\\rawat\\Desktop\\Sar images\\CSV Filees\\OIL_SPILL.csv",'a')
+with myFile:
+    writer = csv.writer(myFile)
+    writer.writerows(myData)
